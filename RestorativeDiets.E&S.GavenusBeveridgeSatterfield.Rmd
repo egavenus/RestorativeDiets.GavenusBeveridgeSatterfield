@@ -1,0 +1,1223 @@
+---
+title: "RestorativeDiets.Ecology&Society.GavenusBeveridge&Satterfield"
+author: "Erika Gavenus, Rachelle Beveridge, and Terre Satterfield"
+date: "2022-09-01"
+output: html_document
+---
+
+```{r libraries, warning=FALSE, message=FALSE}
+library (tidyverse)
+library (readxl)
+```
+
+The following R Markdown file includes four parts: 
+
+(I) The script used to generate and randomly sample from distributions to generate a range of salmon harvest rates consistent with likely restorative diets of coastal First Nations. 
+
+(II) The script used to explore how variance in each of the defined variables likely contributes to variance in restorative harvest rates.
+
+(III) The script used to check the range of likely harvest rates against quantitative benchmarks: (A) other estimates of historical, heritage, or preferred rates available in the literature; (B) upper tolerable intake levels for nutrients; and (C) salmon returns.
+
+(IV) The script used to compare the range of restorative harvest rates to contemporary rates of harvest, use, and allocation.
+
+# I. Estimating salmon harvest rates consistent with restorative diets of coastal First Nations
+
+Modeling an estimated rate of salmon use, anchored in rates pre-Crown interruptions, for First Nations along the coast of British Columbia
+
+The modeling approach we take follows from the general logic used by Hewes (1973) in reconstructing harvest rates from dietary use. Moving from dietary use to harvest rates is a major assumption of this modeling approach, which is covered more in the discussion section. Taking this approach facilitates bringing multiple sources from different disciplines into conversation with each other. Defining the model and its parameters clearly, and using repeated sampling, allows us to be transparent about the level of uncertainty involved in such an estimate. In the sections below we describe and define the model parameters.
+
+Throughout we will be using 100000 samples in the distributions.
+```{r n.samples, warning=FALSE, message=FALSE}
+n.samples<-10000
+```
+
+The harvest rates consistent with restorative diets are a function of: (A) the percent of calories contributed by salmon, historically; (B) the caloric needs of the contemporary population; and (C) the mass of salmon harvested per calorie eaten.
+
+## I.A. Percent of calories contributed by salmon, historically
+The values for the Percent of Daily Calories from Salmon represent the primary means for anchoring the modelled estimate in precolonial diets. They were sampled from a distribution of the products of: (i) the likely proportion of diets contributed by fished resources,  (ii) proportion of fished resources comprised of finfish, and  (iii) proportion of finfish calories contributed by salmon—each of which was defined using existing literature to reflect, to the extent possible, dietary practices of coastal First Nations preceding Crown-imposed fisheries governance.
+
+### I.A.i Proportion of diets contributed by fished resources
+Values for the proportion of diets contributed by fished resources were sampled from a beta distribution defined using the estimated relative dependence of 19 Indigenous societies within the study region [SI: Appendix C] as reported in The Ethnographic Atlas, ranging from 36% to 65% of calories from fished foods (Murdock, 1967). 
+
+To define alpha and beta parameters from mean and variance, the following function was used:
+
+```{r functions, warning=FALSE, message=FALSE}
+estBetaParams <- function(mu, var) {
+  alpha <- ((1 - mu) / var - 1 / mu) * mu ^ 2
+  beta <- alpha * (1 / mu - 1)
+  return(params = list(alpha = alpha, beta = beta))
+}
+```
+
+
+```{r dist.kcal.fish, warning=FALSE, message=FALSE}
+low.dependence<-c(36:45) # possible dependencies in range of 36-45%
+med.dependence<-c(46:55) # possible dependencies in range of 46-55%
+hi.dependence<-c(56:65) # possible dependencies in range of 56-65%
+
+sample.dependence<-c(sample(low.dependence, 100, replace=TRUE), # sampling 100 from range of 36-45%
+                     sample(med.dependence, 900, replace=TRUE), # sampling 900 from range of 46-55%
+                     sample(hi.dependence, 900, replace=TRUE)) # sampling 900 from range of 56-65%
+sample.dependence<-sample.dependence/100 # converting the sampled dependencies back to decimals
+
+kcal.fish.mean<-mean(sample.dependence) # calculating mean and variance of sampled dependencies
+kcal.fish.var<-var(sample.dependence)
+
+kcal.fish.betaparam<-estBetaParams(kcal.fish.mean, kcal.fish.var) # using sample mean and var to estimate alpha and beta parameters
+
+dist.kcal.fish<-rbeta(n=n.samples, kcal.fish.betaparam$alpha, kcal.fish.betaparam$beta, ncp=0) # generating a beta distribution for proportion of calories contributed by fished resources
+
+# plotting distribution
+hist(dist.kcal.fish)
+
+```
+
+### I.A.ii Proportion of fished resources comprised of finfish
+To move our estimate from the proportion of calories from fished species to the proportion of total calories contributed specifically by salmon, we used zooarchaeological data from the region. As it is challenging to compare abundance measures based on bones versus shells (Moss, 2012), we defined a uniform distribution for the percent of fished resources contributed by finfish (Dalsgaard, Wallace, Salas, & Preikshot, 1998; Satterfield, Robertson, Pitts, & Jacobson, 2015). Here, finfish is used to distinguish from crustaceans, echinoderms, molluscs, and marine mammals along with calories contributed by herring (Clupea pallasii) eggs and eulachon (Thaleichthys pacificus) grease, which are less likely to be represented in the zooarchaeological data
+
+```{r finfish.kcal, warning=FALSE, message=FALSE}
+kcal.finfish.backtothefuture<-2/3 # value from Dalsgaard et al. 1998
+kcal.finfish.namgis<-.47/.55 # value from Satterfield et al, 2015
+
+dist.kcal.finfish<-runif(n=n.samples, min=kcal.finfish.backtothefuture, max=kcal.finfish.namgis) # uniform distribution using the above values as minimum and maximums
+
+# plotting distribution
+hist(dist.kcal.finfish)
+```
+
+### I.A.iii Proportion of finfish calories contributed by salmon
+The beta distribution for the proportion of finfish calories contributed by salmon is based on the ratio of salmon to total identified specimens reported in a zooarchaeological meta-analysis by McKechnie and Moss (2016) from sites within the Salish Sea (n=94), West Coast Vancouver Island (n=20), Central BC Coast (n=24), North BC Coast (n=31), and Haida Gwaii (n=18) regions. The number of specimens was converted to expected contributed calories by multiplying each specimen count by average bodyweights for the identified species based on weights provided in Hillis et al. (2022); the conversion factor of whole to gutted fish for each species as listed in Crapo et al. (2004); and an approximation of calories per gram of edible weight from the Canadian Nutrient File (Health Canada, 2021) [SI: Appendix D].
+
+```{r dist.salmon.fish, warning=FALSE, message=FALSE}
+salmon.fish.data<-read_excel("ZooArchRecords.xlsx", 
+    sheet = "distribution") # importing NISP data from McKechnie & Moss 2016 supplemental materials that has been converted to estimate the expected ratio of salmon calories to total calories using the information above and shared in Appendix D
+
+salmon.fish.data$`salmon%kcal`<-salmon.fish.data$`salmon%kcal`/100
+
+
+hist(salmon.fish.data$`salmon%kcal`) # plotting original data
+
+salmon.fish.mu<-mean(salmon.fish.data$`salmon%kcal`) # calculating mean and variance of original data
+salmon.fish.var<-var(salmon.fish.data$`salmon%kcal`)
+
+salmon.fish.betaparam<-estBetaParams(salmon.fish.mu, salmon.fish.var) # estimating alpha and beta parameters from original data
+
+dist.salmon.fish<- rbeta(n.samples, salmon.fish.betaparam$alpha, salmon.fish.betaparam$beta) # beta distribution for proportion of fished calories contributed by salmon
+
+# plotting distribution
+hist(dist.salmon.fish)
+
+# comparing distribution to original data
+qqplot(salmon.fish.data$`salmon%fish`, dist.salmon.fish, plot.it = TRUE)
+
+
+```
+
+### Distribution of historical proportion of total calories from salmon
+
+Here we sample from the above distributions to estimate a distribution of likely values for the historical proportion of total calories contributed by salmon
+
+```{r est.kcalsalmon.totalkcal, message=FALSE, warning=FALSE}
+
+# repeated, random sampling
+for(n in n.samples) {
+  value.kcal.fish<-sample(dist.kcal.fish, n, replace=TRUE, prob=NULL)
+  value.salmon.fish<-sample(dist.salmon.fish, n, replace=TRUE, prob=NULL)
+  value.kcal.finfish<-sample(dist.kcal.finfish, n, replace=TRUE, prob=NULL)
+  est.kcalsalmon.totalkcal<-value.kcal.fish*value.kcal.finfish*value.salmon.fish
+}
+
+hist(est.kcalsalmon.totalkcal)
+percentsalmonkcal.distribution<-data.frame(percent.kcal.salmon=c(est.kcalsalmon.totalkcal))
+
+# plotting proportion of total calories from fished resources
+kcalfish.totalkcal.df<-data.frame(kcalfish.totalkcal=c(dist.kcal.fish))
+
+kcalfish.totalkcal.density<- ggplot(kcalfish.totalkcal.df, aes(x=kcalfish.totalkcal)) +
+  geom_density(fill="#537191") +
+  theme_classic() + 
+  xlim(0, 1)+
+  theme(axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.x=element_blank(), 
+        axis.ticks.y=element_blank()) 
+kcalfish.totalkcal.density
+
+# plotting proportion of fished calories from finfish
+kcalfinfish.kcalfish.df<-data.frame(kcalfinfish.kcalfish=c(dist.kcal.finfish))
+
+kcalfinfish.kcalfish.density<- ggplot(kcalfinfish.kcalfish.df, aes(x=kcalfinfish.kcalfish)) +
+  geom_density(fill="#537191") +
+  xlim(0, 1)+
+  theme_classic() +
+  theme(axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.x=element_blank(), 
+        axis.ticks.y=element_blank()) 
+kcalfinfish.kcalfish.density
+
+# plotting proportion of finfish calories from salmon
+salmonkcal.fishkcal.df<-data.frame(salmonkcal.fishkcal=c(dist.salmon.fish))
+
+salmonkcal.fishkcal.density<- ggplot(salmonkcal.fishkcal.df, aes(x=salmonkcal.fishkcal)) +
+  geom_density(fill="#537191") +
+  xlim(0, 1)+
+  theme_classic() + 
+  theme(axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.x=element_blank(), 
+        axis.ticks.y=element_blank()) 
+salmonkcal.fishkcal.density
+
+# plotting proportion of total calories from salmon
+kcalsalmon.totalkcal.density<-ggplot(percentsalmonkcal.distribution, aes(x=percent.kcal.salmon)) +
+  xlim(0, 1)+
+  geom_density(fill="#537191") +
+  theme_classic() + 
+  theme(axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.x=element_blank(), 
+        axis.ticks.y=element_blank()) 
+kcalsalmon.totalkcal.density   
+```
+
+## I.B. Caloric needs of the contemporary population
+
+The values for Daily Calories Required per Person were sampled from a lognormal distribution defined by the Estimated Energy Requirement equations from Health Canada (2006) based on contemporary age- and gender-distributions (Statistics Canada, 2021), along with expected activity levels (Macridis et al., 2020). 
+
+Using the equation for Estimate Energy Requirement and reference heights and weights (https://www.canada.ca/en/health-canada/services/food-nutrition/healthy-eating/dietary-reference-intakes/tables.html#eeer) we created a dataframe of possible EERs, indexed by age, gender, and activity level. We have not included Infants and Young Children (0-35 months) as salmon and solid foods in general might be contributing a much different percentage of their calories than for older children and adults. The EERs for people who are pregnant or lactating are included at the end.
+
+```{r eer.df, warning=FALSE, message=FALSE}
+eer.dist<-read_csv("eer.dist.csv")
+```
+
+We then created a sample population following contemporary (i) age, (ii) sex, and (iii) activity level distributions.
+
+### I.B.i. Age
+The age structure of the contemporary population of coastal First Nations is retrieved from Statistics Canada: Table 17-10-0144-01  Projected population by Indigenous identity, age group, sex, area of residence, provinces and territories, and projection scenario, Canada (x 1,000), using (unprojected) data from 2016, all areas of residence, total indigenous identity, within in BC
+
+```{r age.dist, warning=FALSE, message=FALSE}
+age.dist<-data.frame(age=3:80, prop=0)
+age.dist$prop[age.dist$age<=4]<-4.6
+age.dist$prop[age.dist$age>=5]<-5
+age.dist$prop[age.dist$age>=10]<-5
+age.dist$prop[age.dist$age>=15]<-5
+age.dist$prop[age.dist$age>=20]<-5
+age.dist$prop[age.dist$age>=25]<-4.4
+age.dist$prop[age.dist$age>=35]<-3.5
+age.dist$prop[age.dist$age>=45]<-3.8
+age.dist$prop[age.dist$age>=55]<-3
+age.dist$prop[age.dist$age>=65]<-1.5
+age.dist$prop[age.dist$age>=75]<-1.2
+
+total.pop<-age.dist %>% # calculating total population of age distribution
+  select(prop) %>%
+  summarise(total.pop=sum(.))
+
+age.dist$age.prob<-age.dist$prop/total.pop$total.pop # calculating probability for each age
+
+age.dist<-age.dist[, c("age", "age.prob")]
+
+age.dist.plot<-ggplot(age.dist, aes(x=age, y=age.prob)) +
+  geom_col()
+age.dist.plot
+```
+
+``` {r age.samplepop, warning=FALSE, message=FALSE}
+# Ages for sample population
+sample.ages<-sample(age.dist$age, n.samples, replace=TRUE, prob=age.dist$age.prob)
+hist(sample.ages)
+
+```
+
+### I.B.ii. Sex
+
+The sex distribution was assumed to be binary, with 50:50 probability.
+
+```{r sex.dist, warning=FALSE, message=FALSE}
+sex.dist<-data.frame(sex=c("m", "f"), sex.prob=c(0.5, 0.5))
+```
+
+``` {r sex.samplepop, warning=FALSE, message=FALSE}
+sample.sexes<-sample(sex.dist$sex, n.samples, replace=TRUE, prob=sex.dist$sex.prob)
+
+```
+
+### I.B.iii. Activity level
+
+The proportion of the population falling within each activity level: sedentary, low active, active, and very active, was estimated based on probabilities from the 2019 ParticipACTION report card on physical activity for adults living in Canada https://participaction.cdn.prismic.io/participaction/ab4a4d1a-35a3-40f1-9220-7b033ae21490_2019_ParticipACTION_Report_Card_on_Physical_Activity_for_Adults.pdf. There was no designation for very active within that report, and the physically active proportion (52%) was split as 22% very active and 30% active. Evidence from the FNFNES study offers an alternative: with [....]
+
+```{r act.level.dist, warning=FALSE, message=FALSE}
+activity.dist<-data.frame(act.level=c("sed", "lowact", "act", "veryact"), act.prob=c(0.18, 0.29, 0.30, 0.22))
+```
+
+```{r act.level.sample, warning=FALSE, message=FALSE}
+sample.act<-sample(activity.dist$act.level, n.samples, replace=TRUE, prob=activity.dist$act.prob)
+```
+
+### Distribution of contemporary caloric needs
+Using the sample population we generated a lognormal distribution of likely daily caloric needs.
+
+```{r eer.samplepopulation, warning=FALSE, message=FALSE}
+
+sample.df<-data.frame(age=c(sample.ages), sex=c(sample.sexes), act.level=c(sample.act)) # combining age, sex, and activity level to create sample population, note these are currently independent
+
+sample.df$rownum<-1:n  # Assigning row numbers for indexing
+
+# Adding a column to the sample population data frame that notes whether the person is pregnant or lactating. 10% of the females in the sample population who are aged 19-35 are assigned as pregnant or lactating, informed by the number of children younger than 1 year old in the census data.
+
+sample.df.preglact<-sample.df %>% # 
+  filter(age>19 & age<35 & sex=="f")
+
+preglact.nrow<-nrow(sample.df.preglact)
+preglact.sample.n<-preglact.nrow*.10
+
+preglact<-sample(sample.df.preglact$rownum, preglact.sample.n)
+
+preglact.df<-sample.df.preglact %>%
+  filter(rownum %in% c(preglact))
+
+preglact.df$preglact<-1
+sample.df.preglact<-left_join (sample.df.preglact, preglact.df)
+sample.df<-left_join(sample.df, sample.df.preglact)
+
+# merging the sample population with the dataframe of EER
+sample.eer<-merge(sample.df, eer.dist, all.x=TRUE, all.y=FALSE)
+
+# Adding 380 calories to the EER for anyone who is pregnant or lactating
+sample.eer$preglact[is.na(sample.eer$preglact)]<-0
+sample.eer$eer[sample.eer$preglact==1]<-sample.eer$eer+380
+
+hist(sample.eer$eer, breaks=10)
+summary(sample.eer$eer)
+```
+The frequency distribution of EER for the sample population is then used to define a lognormal distribution of likely caloric needs.
+
+```{r eer.distribution, warning=FALSE, message=FALSE}
+sample.eer$ln.eer<-log(sample.eer$eer)
+eer.sd<-sd(sample.eer$ln.eer)
+eer.mean<-mean(sample.eer$ln.eer)
+eer.min<-min(sample.eer$ln.eer)
+eer.max<-max(sample.eer$ln.eer)
+
+lnorm.eer<-rlnorm(n.samples, mean=eer.mean, sd=eer.sd)
+
+qqplot(lnorm.eer, sample.eer$ln.eer)
+
+eer.distribution<-data.frame(eer=c(lnorm.eer))
+
+## plotting distribution of EER
+eer.density.plot<-ggplot(eer.distribution, aes(x=eer))+
+  geom_density(fill="#e8b368") +
+  xlim(0, 7000)+
+  theme_classic() + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), axis.text.x = element_blank(), axis.text.y=element_blank(), axis.ticks.x=element_blank(), axis.ticks.y=element_blank()) 
+eer.density.plot
+
+## plotting distribution of ages
+age.density.plot<-ggplot(sample.df, aes(x=age))+
+  geom_density(fill="#e8b368") +
+  theme_classic() + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), axis.text.x = element_blank(), axis.text.y=element_blank(), axis.ticks.x=element_blank(), axis.ticks.y=element_blank()) 
+age.density.plot
+
+## plotting distribution fo sexes
+sex.density.plot<-ggplot(sample.df, aes(x=sex))+
+  geom_bar(fill="#e8b368") +
+  ylim(0, 7000) +
+  theme_classic() + 
+  theme(axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.x=element_blank(), 
+        axis.ticks.y=element_blank()) 
+sex.density.plot
+
+## plotting distribution of activity levels
+activity.density.plot<-ggplot(sample.df, aes(x=act.level))+
+  geom_bar(fill="#e8b368") +
+  theme_classic() + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.x=element_blank(), axis.ticks.y=element_blank()) 
+activity.density.plot
+```
+
+## I.C. Mass of salmon harvested per calorie eaten
+
+This distribution reflects two underlying variables: (i) the grams of salmon eaten per calorie and (ii) the grams of salmon harvested per gram eaten.
+
+### I.C.i. Grams of salmon eaten per calorie
+The lognormal distribution of grams of salmon eaten per calorie was constructed based on the caloric content of all non-farmed salmon foods included in the Canadian Nutrient File, inclusive of different species and preparations [SI: Appendix E] (Health Canada, 2021). 
+
+The distribution is currently unweighted by preferred species or preparation. While there was limited variability in caloric content by species or preparation, there is considerable room to incorporate First Nations preferences here. Additionally, local knowledge holders have noted differences in taste, quality, and fat content of salmon depending the timing and location of salmon harvest. These differences likely reflect differences in nutrient profiles of the fish, and further investigations could reveal greater variability in caloric intake. 
+
+```{r geaten.kcal, warning=FALSE, message=FALSE}
+salmon.kcal.amts <- read_excel("salmon.kcal.xlsx")
+salmon.kcal.amts$g.kcal<-salmon.kcal.amts$g/salmon.kcal.amts$kcal
+
+hist(salmon.kcal.amts$g.kcal, breaks=10)
+
+mean.g.kcal<-mean(salmon.kcal.amts$g.kcal)
+sd.g.kcal<-sd(salmon.kcal.amts$g.kcal)
+min.g.kcal<-min(salmon.kcal.amts$g.kcal)
+max.g.kcal<-max(salmon.kcal.amts$g.kcal)
+
+salmon.kcal.amts$ln<-log(salmon.kcal.amts$g.kcal)
+hist(salmon.kcal.amts$ln, breaks=10)
+mean.log<-mean(salmon.kcal.amts$ln)
+sd.log<-sd(salmon.kcal.amts$ln)
+min.log<-min(salmon.kcal.amts$ln)
+max.log<-max(salmon.kcal.amts$ln)
+
+ln.g.kcal<-rlnorm(n.samples, meanlog=mean.log, sdlog=sd.log)
+hist(ln.g.kcal, breaks=10)
+qqplot(salmon.kcal.amts$g.kcal, ln.g.kcal)
+
+g.kcal.distribution<-data.frame(g.kcal=c(ln.g.kcal))
+
+```
+
+
+### I.C.ii. Grams of salmon harvested per gram eaten
+The lognormal distribution of grams of harvested salmon per gram eaten reflects the conversion factor for whole fish weight to edible weight for each species: pink (O. gorbuscha), sockeye (O. nerka), chum (O. keta), coho (O. kisutch), and spring (O. tshawytscha) (Crapo et al., 2004). These estimates range from 72% to 92% of harvested weight retained. This alligns with the conversion figure used by Fediuk et al (2008) of 85%, which was arrived at through literature review and confirmation with technical committees. 
+
+
+```{r harvestedg.eateng, warning=FALSE, message=FALSE}
+mean.harvested.eaten<-mean(c(log(1/.91), log(1/.92), log(1/.89), log(1/.92), log(1/.88),
+                             log(1/.73), log(1/.74), log(1/.74), log(1/.75), log(1/.72)))
+sd.harvested.eaten<-sd(c(log(1/.91), log(1/.92), log(1/.89), log(1/.92), log(1/.88),
+                             log(1/.73), log(1/.74), log(1/.74), log(1/.75), log(1/.72)))
+
+harvest.eaten.lnorm<-rlnorm(n.samples, meanlog=mean.harvested.eaten, 
+                          sd=sd.harvested.eaten)
+
+gharvested.geaten.df<-data.frame(gharvested.geaten=c(harvest.eaten.lnorm))
+
+```
+
+### Grams of salmon harvested to contribute one calorie
+Sampling from the above distributions we can construct a distribution of the grams of salmon that would need to be harvested to contribute one calorie to a person's diet.
+
+```{r gharvested.kcal, warning=FALSE, message=FALSE}
+for(n in n.samples) {
+  g.kcal.eaten<-sample(ln.g.kcal, n, replace=TRUE, prob=NULL)
+  gharvested.geaten<-sample(harvest.eaten.lnorm, n, replace=TRUE, prob=NULL)
+  est.g.harvest.kcal<-g.kcal.eaten*gharvested.geaten
+}
+
+g.harvest.kcal.dist<-data.frame(gharvest.kcal=c(est.g.harvest.kcal))
+
+# plotting distribution of grams harvested per calorie
+g.harvested.kcal.plot<-ggplot(g.harvest.kcal.dist, aes(x=gharvest.kcal))+
+  geom_histogram(fill="#6A9C75")+
+  theme_bw()
+g.harvested.kcal.plot
+
+g.harvested.kcal.density<-ggplot(g.harvest.kcal.dist, aes(x=gharvest.kcal))+
+  geom_density(fill="#6A9C75")+
+  xlim(0, 3)+
+  theme_classic() +
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), axis.text.x = element_blank(),  axis.text.y=element_blank(), axis.ticks.x=element_blank(), axis.ticks.y=element_blank()) 
+g.harvested.kcal.density
+
+# plotting distribution of grams eaten per calorie
+geaten.kcal.df<-data.frame(geaten.kcal=g.kcal.distribution$g.kcal)
+
+geaten.kcal.density<-ggplot(g.kcal.distribution, aes(x=g.kcal))+
+  geom_density(fill="#6A9C75")+
+  theme_classic() +
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), axis.text.x = element_blank(), axis.text.y=element_blank(), axis.ticks.x=element_blank(), axis.ticks.y=element_blank()) 
+geaten.kcal.density
+
+# plotting distribution of grams harvested per gram eaten
+gharvested.geaten.df<-data.frame(gharvested.geaten=c(harvest.eaten.lnorm))
+
+gharvested.geaten.density<-ggplot(gharvested.geaten.df, aes(x=gharvested.geaten))+
+  geom_density(fill="#6A9C75")+
+  theme_classic() +
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank(), axis.text.x = element_blank(), axis.text.y=element_blank(), axis.ticks.x=element_blank(), axis.ticks.y=element_blank()) 
+gharvested.geaten.density
+```
+## Salmon harvest rates consistent with restorative diets
+We used the distributions described above and repeated sampling (n=10000) to arrive at an estimated range of harvest rates consistent with restorative diets, with the units of grams of salmon that would be harvested per person per year.
+
+```{r g.person.yr, warning=FALSE, message=FALSE}
+for(n in n.samples) {
+  g.kcal.harvest<-sample(est.g.harvest.kcal, n, replace=TRUE, prob=NULL)
+  kcal.day<-sample(eer.distribution$eer, n, replace=TRUE, prob=NULL)
+  percent.salmon<-sample(est.kcalsalmon.totalkcal, n, replace=TRUE, prob=NULL)
+  g.person.yr<-g.kcal.harvest*kcal.day*365*percent.salmon
+}
+```
+
+```{r restorativeharvestrates.plots, message=FALSE, warning=FALSE}
+g.person.yr.dist<-data.frame(g.person.yr=c(g.person.yr))
+
+g.person.yr.plot<-ggplot(g.person.yr.dist, aes(x=g.person.yr)) +
+  geom_histogram(fill="#BDBDBD", binwidth = 10000) +
+  xlim(0, 1000000) +
+  ylim(0, 200) +
+  theme_bw()
+g.person.yr.plot
+
+g.person.yr.density<-ggplot(g.person.yr.dist, aes(x=g.person.yr)) +
+  geom_density(fill="#BDBDBD") +
+  xlim(0, 1050000) +
+  theme_classic() +
+  geom_vline(xintercept=median(g.person.yr), linetype=1) +
+  geom_vline(xintercept=quantile(g.person.yr, 0.25), linetype=2) +
+  geom_vline(xintercept=quantile(g.person.yr, 0.75), linetype=2) +
+  theme(axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.x=element_blank(), 
+        axis.ticks.y=element_blank()) 
+g.person.yr.density
+
+summary(g.person.yr)
+
+# selecting subset of sample that falls in 25-75% of sample based on Q1 and Q3
+q1<-quantile(g.person.yr, 0.25)
+q3<-quantile(g.person.yr, 0.75)
+g.person.yr.iqr<-data.frame(g.person.yr.iqr=g.person.yr.dist[g.person.yr.dist$g.person.yr>=q1 & g.person.yr.dist$g.person.yr<=q3, ])
+
+g.person.yr.iqr.density<-ggplot(g.person.yr.iqr, aes(x=g.person.yr.iqr)) +
+  geom_density(fill="#593e67") +
+  xlim(0, 400000) +
+  theme_classic() +
+  theme(axis.title.x=element_blank(), 
+        axis.title.y=element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.x=element_blank(), 
+        axis.ticks.y=element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "transparent",colour = NA),
+        plot.background = element_rect(fill = "transparent",colour = NA)) 
+g.person.yr.iqr.density
+
+## gray-scale for article maintext
+max.iqr<-max(g.person.yr.iqr$g.person.yr.iqr)/1000
+g.person.yr.iqr.density<-ggplot(g.person.yr.iqr,  aes(x=g.person.yr.iqr/1000)) +
+  geom_density(fill="#4d4d4d", colour="#4d4d4d") +
+  theme_classic() +
+  xlab("Rate of Salmon Harvest\n(kg/person/year)")+
+  ylab("Frequency")+
+  scale_x_continuous(breaks=c(65, 215),
+                     limits=c(0, max.iqr+50),
+                     position="top") +
+  theme(axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+g.person.yr.iqr.density
+
+ggsave("iqr.density.png", g.person.yr.iqr.density, dpi = 700, width=6.5, height=2)
+
+## Figure 1
+g.person.yr.df<-data.frame(g.person.yr=g.person.yr)
+g.person.yr.iqr.line<-ggplot(g.person.yr.df,  aes(x=g.person.yr/1000)) +
+  geom_segment(aes(x=q1/1000, xend=q3/1000, y=0.5, yend=0.5), color="#537191") +
+  geom_point(aes(x=q1/1000, y=0.5), color="#537191", size=3 ) +
+  geom_point(aes(x=q3/1000, y=0.5), color="#537191", size=3 ) +
+  theme_classic() +
+  xlab("Rate of Salmon Harvest\n(kg/person/year)")+
+  ylab("Restorative Diets")+
+  scale_x_continuous(breaks=c(60, 240),
+                     limits=c(0, q3/1000+50))+
+  ylim(0, 3)+
+  theme(axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+g.person.yr.iqr.line
+
+ggsave("iqr.line.png", g.person.yr.iqr.line, dpi = 700, width=7.5, height=3)
+```
+
+# II. Sensitivity of restorative harvest rates to variance in defined variables
+
+## II.A. Linear regression analysis of restorative harvest rate as function of EER, proportion of diet from salmon, and amount of salmon harvested per calorie
+
+```{r regresssion.sensitivity, warning=FALSE, message=FALSE}
+sensy.df<-data.frame(gharvest.kcal=c(g.kcal.harvest), kcal.day=c(kcal.day), kcalsalmon.kcaltotal=c(percent.salmon), gharvested.person.yr=c(g.person.yr))
+
+summary(sensy.df)
+
+scaled.sensy.df<-as.data.frame(scale(sensy.df))
+
+sensy.reg<-glm(gharvested.person.yr~gharvest.kcal+kcal.day+kcalsalmon.kcaltotal,
+               family=gaussian,
+               data=scaled.sensy.df)
+summary(sensy.reg)
+
+```
+
+```{r regression.sensitivity.salmoncontribution, warning=FALSE, message=FALSE}
+sensy.percentsalmon.df<-data.frame(kcalsalmon.kcaltotal=c(percent.salmon), kcalfish.total=c(dist.kcal.fish), kcalsalmon.kcalfish=c(dist.salmon.fish), kcalfinfish.kcalfish=c(dist.kcal.finfish))
+
+summary(sensy.percentsalmon.df)
+
+scaled.sensy.percentsalmon.df<-as.data.frame(scale(sensy.percentsalmon.df))
+summary(scaled.sensy.percentsalmon.df)
+
+sensy.percentsalmon.reg<-glm(kcalsalmon.kcaltotal~kcalfish.total+kcalsalmon.kcalfish+kcalfinfish.kcalfish,
+               family=gaussian,
+               data=scaled.sensy.percentsalmon.df)
+summary(sensy.percentsalmon.reg)
+```
+
+
+Including another check on sensitivity, in which we set each variable to its median value and assess how that alters the extent of the modelled range. Here I am trying to get a better handle on which variables are contributing the most to the large range and how solid we feel in the distributions that we have used.
+
+```{r med.eer.model, warning=FALSE, message=FALSE}
+q1<-quantile(g.person.yr, 0.25)
+q3<-quantile(g.person.yr, 0.75)
+iqr.model<-q3-q1
+
+median.eer<-median(kcal.day)
+
+for(n in n.samples) {
+  g.kcal.harvest<-sample(est.g.harvest.kcal, n, replace=TRUE, prob=NULL)
+  percent.salmon<-sample(est.kcalsalmon.totalkcal, n, replace=TRUE, prob=NULL)
+  med.eer.model<-g.kcal.harvest*median.eer*365*percent.salmon
+}
+
+q1.med.eer<-quantile(med.eer.model, probs=0.25)
+q3.med.eer<-quantile(med.eer.model, probs=0.75)
+iqr.med.eer<-q3.med.eer-q1.med.eer
+med.eer.contribution<-iqr.med.eer/iqr.model
+
+med.eer.contribution
+```
+
+```{r med.propsalmon.model, warning=FALSE, message=FALSE}
+median.propsalmon<-median(percent.salmon)
+
+for(n in n.samples) {
+  g.kcal.harvest<-sample(est.g.harvest.kcal, n, replace=TRUE, prob=NULL)
+  kcal.day<-sample(eer.distribution$eer, n, replace=TRUE, prob=NULL)
+  percent.salmon<-median.propsalmon
+  med.propsalmon.model<-g.kcal.harvest*kcal.day*365*percent.salmon
+}
+
+q1.med.propsalmon<-quantile(med.propsalmon.model, probs=0.25)
+q3.med.propsalmon<-quantile(med.propsalmon.model, probs=0.75)
+iqr.med.propsalmon<-q3.med.propsalmon-q1.med.propsalmon
+med.propsalmon.contribution<-iqr.med.propsalmon/iqr.model
+
+med.propsalmon.contribution
+
+```
+
+```{r med.harvestperkcal.model, warning=FALSE, message=FALSE}
+median.harvestperkcal<-median(g.kcal.harvest)
+
+for(n in n.samples) {
+  g.kcal.harvest<-median.harvestperkcal
+  kcal.day<-sample(eer.distribution$eer, n, replace=TRUE, prob=NULL)
+  percent.salmon<-sample(est.kcalsalmon.totalkcal, n, replace=TRUE, prob=NULL)
+  med.harvestperkcal.model<-g.kcal.harvest*kcal.day*365*percent.salmon
+}
+
+q1.med.harvestperkcal<-quantile(med.harvestperkcal.model, probs=0.25)
+q3.med.harvestperkcal<-quantile(med.harvestperkcal.model, probs=0.75)
+iqr.med.harvestperkcal<-q3.med.harvestperkcal-q1.med.harvestperkcal
+med.harvestperkcal.contribution<-iqr.med.harvestperkcal/iqr.model
+
+med.harvestperkcal.contribution
+```
+
+```{r rel.iqr.plot, warning=FALSE, message=FALSE}
+relative.iqr.df<-data.frame(variable=c("Full Model", "Median Proportion of Diet from Salmon", "Median Daily Calories", "Median Harvested Amount per Calorie"), lower=c(q1, q1.med.propsalmon, q1.med.eer, q1.med.harvestperkcal), upper=c(q3, q3.med.propsalmon, q3.med.eer, q3.med.harvestperkcal))
+
+iqr.sensitivity<- ggplot(relative.iqr.df) +
+  geom_segment( aes(x=variable, xend=variable, y=lower, yend=upper), color="grey") +
+  geom_point( aes(x=variable, y=lower), color="#666666", size=3 ) +
+  geom_point( aes(x=variable, y=upper), color="#666666", size=3 ) +
+  coord_flip()+
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    panel.border = element_blank(),
+    axis.text.x = element_blank()
+    ) +
+  xlab("") +
+  ylab("Rate of Salmon Use, Interquartile Range")
+iqr.sensitivity
+
+ggsave("iqr.sensitivity.png", iqr.sensitivity, dpi = 700, width=8, height=4)
+
+```
+
+# III. Checking restorative harvest rates against quantitative benchmarks
+
+We performed three quantitative checks on the reasonableness of the modelled rate of harvest. (1)  Six estimates of historical, heritage, or desired rates of salmon use were identified in the available literature and converted to comparable units to check the consistency of the restorative harvest rates arrived at herein. (2) The upper bounds for the amount of salmon consistent with restoratives diets was checked against people’s biological capacities to benefit from salmon. (4) The rate of harvest was compared to contemporary salmon returns as an approximate check on the ecological capacity of local systems to support restoring diets.
+
+## III.A. Comparing to other estimates from available literature
+
+```{r litsource.import, warning=FALSE, message=FALSE}
+library(readxl)
+litsource.data<-read_excel("LiteratureAmountParameters.xlsx")
+```
+
+Through our literature review we identified six sources that offered an approximation of precolonial or heritage rates of salmon use. These approximations include a goal for future harvest as determined by Wuikinuxv (Adams et al., 2021) and the amount of salmon included in a Contemporary Traditional diet defined by the ‘Namgis Food Sovereignty project (Satterfield et al., 2015), which we felt offer a check on the future-looking applicability of the modeled range. As the offered rates differed in units used, we used repeated sampling to convert all rates into units of grams harvested per person per year. These literature sources are included in the Excel file: LiteratureAmountParameters.xlsx
+
+As some of the literature sources use number of fish, as opposed to mass harvested, we created a distribution of grams per fish based on figures given in Browning (1980). The distribution of likley masses is currently unweighted by preferred salmon species, all species are equally represented.
+
+```{r g.fish, waring=FALSE, message=FALSE}
+### sockeye ###
+m <- 2.3
+s <- 0.45
+location <- log(m^2 / sqrt(s^2 + m^2))
+shape <- sqrt(log(1 + (s^2 / m^2)))
+print(paste("location:", location))
+print(paste("shape:", shape))
+log.sockeye.sz <- rlnorm(n.samples, location, shape)
+hist(log.sockeye.sz)
+
+### humpy ###
+
+m <- 2.05
+s <- 0.325
+location <- log(m^2 / sqrt(s^2 + m^2))
+shape <- sqrt(log(1 + (s^2 / m^2)))
+print(paste("location:", location))
+print(paste("shape:", shape))
+log.humpy.sz <- rlnorm(n.samples, location, shape)
+hist(log.humpy.sz)
+
+### chum ###
+m <- 3.95
+s <- 0.175
+location <- log(m^2 / sqrt(s^2 + m^2))
+shape <- sqrt(log(1 + (s^2 / m^2)))
+print(paste("location:", location))
+print(paste("shape:", shape))
+log.chum.sz <- rlnorm(n.samples, location, shape)
+hist(log.chum.sz)
+
+### coho ###
+m <- 4.55
+s <- 1.375
+location <- log(m^2 / sqrt(s^2 + m^2))
+shape <- sqrt(log(1 + (s^2 / m^2)))
+print(paste("location:", location))
+print(paste("shape:", shape))
+log.coho.sz <- rlnorm(n.samples, location, shape)
+hist(log.coho.sz)
+
+### chinook ###
+
+m <- 10.2
+s <- 1.7
+location <- log(m^2 / sqrt(s^2 + m^2))
+shape <- sqrt(log(1 + (s^2 / m^2)))
+print(paste("location:", location))
+print(paste("shape:", shape))
+log.chinook.sz <- rlnorm(n.samples, location, shape)
+hist(log.chinook.sz)
+
+log.salmon.sz<-c(log.sockeye.sz, log.humpy.sz, log.coho.sz, log.chum.sz, log.chinook.sz)
+hist(log.salmon.sz)
+
+salmon.sz.dist<-sample(log.salmon.sz, n.samples, replace=TRUE)
+hist(salmon.sz.dist)
+
+g.fish.dist<-salmon.sz.dist*1000
+summary(g.fish.dist)
+```
+
+### III.A.i. Adams et al. 2021
+
+Adams, M. S., Connors, B., Levi, T., Shaw, D., Walkus, J., Rogers, S., & Darimont, C. (2021). Local Values and Data Empower Culturally Guided Ecosystem-Based Fisheries Management of the Wuikinuxv Bear – Salmon – Human System. Marine and Coastal Fisheries: Dynamics, Management, and Ecosystem Science, (13), 362–378. https://doi.org/10.1002/mcf2.10171
+
+```{r adams2021, warning=FALSE, message=FALSE}
+fishharvested.p.yr.data<-litsource.data[litsource.data$units=="fishharvested.p.yr", ]
+fishharvested.p.yr.mean<-fishharvested.p.yr.data$mean
+
+for (n in n.samples) {
+  g.fish<-sample(log.sockeye.sz, n, replace=TRUE, prob=NULL)
+  gharvest.p.year.Adams2021<-fishharvested.p.yr.mean[1]*g.fish*1000
+}
+
+Adams2021<-data.frame(source="Adams 2021", type="Preferred Harvest", ref.yr=2021, gharvest.p.year=gharvest.p.year.Adams2021)
+```
+
+### III.A.ii. United States v. Washington, 1974
+
+United States v. Washington, 384 F. Supp. 312, 380 (W.D. Wash. February 12, 1974); aff’d 520 F.2d 676 (9th Cir. 1976), cert. denied, 423 U.S. 1086 (1976), at note 151. 
+
+```{r boldt, warning=FALSE, message=FALSE}
+geaten.p.day.data<-litsource.data[litsource.data$units=="geaten.p.day", ]
+geaten.p.day.mean<-geaten.p.day.data$mean
+
+for(n in n.samples) {
+  refuse.conversion<-sample(harvest.eaten.lnorm, n, replace=TRUE, prob=NULL)
+  gharvest.p.year.WATreatyRight<-geaten.p.day.mean[10]/refuse.conversion*365
+}
+
+WashingtonTreatyRight<-data.frame(source="Boldt Decision", type="Reconstruction", ref.yr=1974, gharvest.p.year=gharvest.p.year.WATreatyRight)
+```
+
+### III.A.iii. Harris & Harper, 1997
+
+Harris, S. G., & Harper, B. L. (1997). A Native American Exposure Scenario. Risk Analysis, 17(6).
+
+```{r harrisharper1997, warning=FALSE, message=FALSE}
+geaten.p.day.data<-litsource.data[litsource.data$units=="geaten.p.day", ]
+geaten.p.day.mean<-geaten.p.day.data$mean
+
+for(n in n.samples) {
+  refuse.conversion<-sample(harvest.eaten.lnorm, n,
+                            replace=TRUE, prob=NULL)
+  gharvest.p.year.HarrisHarper1997<-geaten.p.day.mean[5]/refuse.conversion*365
+}
+
+HarrisHarper1997<-data.frame(source="Harris Harper 1997", type="Ethnography", ref.yr=1997, gharvest.p.year=gharvest.p.year.HarrisHarper1997)
+```
+
+
+### III.A.iv. Hewes, 1973
+
+Hewes, G. W. (1973). Indian Fisheries Productivity in Pre-Contact Times in the Pacific Salmon Area. Northwest Anthropological Research Notes, 7(2), 133–155.
+
+```{r hewes1973, warning=FALSE, message=FALSE}
+lbeaten.p.yr.data<-litsource.data[litsource.data$units=="lbeaten.p.yr", ]
+lbeaten.p.yr.mean<-lbeaten.p.yr.data$mean
+
+for(n in n.samples) {
+  refuse.conversion<-sample(harvest.eaten.lnorm, n, replace=TRUE, prob=NULL)
+  gharvest.p.year.Hewes1973<-(lbeaten.p.yr.mean[3]*453.592)/refuse.conversion
+}
+
+Hewes1973<-data.frame(source="Hewes 1973", type="Reconstruction", ref.yr=1800, gharvest.p.year=gharvest.p.year.Hewes1973)
+```
+
+### III.A.v. Harper & Harris, 2008
+
+Harper, B. L., & Harris, S. G. (2008). A possible approach for setting a mercury risk-based action level based on tribal fish ingestion rates. Environmental Research, 107, 60–68. https://doi.org/10.1016/j.envres.2007.05.008
+
+```{r harperharris2008, warning=FALSE, message=FALSE}
+geaten.p.day.data<-litsource.data[litsource.data$units=="geaten.p.day", ]
+geaten.p.day.mean<-geaten.p.day.data$mean
+
+for(n in n.samples) {
+  refuse.conversion<-sample(harvest.eaten.lnorm, n, replace=TRUE, prob=NULL)
+  gharvest.p.year.HarperHarris2008<-geaten.p.day.mean[3]/refuse.conversion*365
+}
+
+HarperHarris2008<-data.frame(source="Harper Harris 2008", type="Ethnography", ref.yr=2008, gharvest.p.year=gharvest.p.year.HarperHarris2008)
+```
+
+### III.A.vi. Satterfield et al., 2015
+
+Satterfield, T., Robertson, L., Pitts, A., & Jacobson, D. (2015). Reasserting ‘Namgis Food Sovereignty aka Three Boats and a Pick Up Truck.
+
+```{r namgis.check, warning=FALSE, message=FALSE}
+namgis.sockeye<-23928
+namgis.pink<-6931
+namgis.chum<-3602
+
+namgis.wt.small<-10
+namgis.wt.large<-18
+
+grams.lb<-453.592
+
+namgis.g.p.yr<-(namgis.sockeye*namgis.wt.small*grams.lb)/1000+(namgis.pink*namgis.wt.small*grams.lb)/1000+(namgis.chum*namgis.wt.large*grams.lb)/1000
+
+namgis.g.p.yr
+```
+
+### Plot comparing modelled range to other literature-based estimates
+
+```{r lollipop.plot, warning=FALSE, message=FALSE}
+model.q1<-quantile(g.person.yr, 0.25)
+model.q2<-quantile(g.person.yr, 0.50)
+model.q3<-quantile(g.person.yr, 0.75)
+
+adams.q1<-quantile(Adams2021$gharvest.p.year, 0.25)
+adams.q2<-quantile(Adams2021$gharvest.p.year, 0.50)
+adams.q3<-quantile(Adams2021$gharvest.p.year, 0.75)
+
+satterfield.q1<-namgis.g.p.yr
+satterfield.q2<-namgis.g.p.yr
+satterfield.q3<-namgis.g.p.yr
+
+harperharris.q1<-quantile(HarperHarris2008$gharvest.p.year, 0.25)
+harperharris.q2<-quantile(HarperHarris2008$gharvest.p.year, 0.50)
+harperharris.q3<-quantile(HarperHarris2008$gharvest.p.year, 0.75)
+
+harrisharper.q1<-quantile(HarrisHarper1997$gharvest.p.year, 0.25)
+harrisharper.q2<-quantile(HarrisHarper1997$gharvest.p.year, 0.50)
+harrisharper.q3<-quantile(HarrisHarper1997$gharvest.p.year, 0.75)
+
+uswa.q1<-quantile(WashingtonTreatyRight$gharvest.p.year, 0.25)
+uswa.q2<-quantile(WashingtonTreatyRight$gharvest.p.year, 0.50)
+uswa.q3<-quantile(WashingtonTreatyRight$gharvest.p.year, 0.75)
+
+hewes.q1<-quantile(Hewes1973$gharvest.p.year, 0.25)
+hewes.q2<-quantile(Hewes1973$gharvest.p.year, 0.50)
+hewes.q3<-quantile(Hewes1973$gharvest.p.year, 0.75)
+
+
+gharvest.comparison.lollipop.df<-data.frame(source=c("Current Approach", "Adams et al. 2021", "Satterfield et al. 2015", "Harper & Harris 2008", "Harris & Harper 1997", "US v. Washington 1974", "Hewes 1973"), type=c("Modeled Estimate", "Preferred Harvest", "Preferred Harvest", "Heritage Rate", "Heritage Rate", "Reconstruction", "Reconstruction"), q1=c(model.q1, adams.q1, satterfield.q1, harperharris.q1, harrisharper.q1, uswa.q1, hewes.q1), q2=c(model.q2, adams.q2, satterfield.q2, harperharris.q2, harrisharper.q2, uswa.q2, hewes.q2), q3=c(model.q3, adams.q3, satterfield.q3, harperharris.q3, harrisharper.q3, uswa.q3, hewes.q3))
+
+gharvest.comparison.lollipop.df$source<-factor(gharvest.comparison.lollipop.df$source, levels=c("Hewes 1973", "US v. Washington 1974", "Harris & Harper 1997", "Harper & Harris 2008", "Satterfield et al. 2015", "Adams et al. 2021", "Current Approach"), ordered = TRUE)
+
+historcalcomparison.lollipop.plot<-ggplot(gharvest.comparison.lollipop.df, aes(x=source, colour=type)) +
+  geom_segment(aes(x=source, xend=source, y=q1/1000, yend=q3/1000)) +
+  geom_point(aes(x=source, y=q1/1000), size=3) +
+  geom_point(aes(x=source, y=q2/1000), size=5, shape=5) +
+  geom_point(aes(x=source, y=q3/1000), size=3) +
+  ylim(0, 300)+
+  coord_flip()+
+  scale_colour_manual(values=c("#537191", "#2d9675", "#e8b368", "#D55E00"),
+                      breaks=c("Modeled Estimate", "Preferred Harvest",
+                               "Heritage Rate", "Reconstruction"),
+                      name="Type of Rate") +
+  ylab("Rate of Salmon Harvest
+kg/person/year") +
+  theme_bw() +
+  theme(axis.title.y=element_blank(),
+        text = element_text(size = 12))
+
+
+historcalcomparison.lollipop.plot
+
+ggsave("gharvest.comparison.lollipop.png", historcalcomparison.lollipop.plot, dpi = 700, width=8, height=4)
+```
+
+## III.B. Checking against Upper Tolerable Intake Levels
+
+To check that the estimated range fits within the biological capacity for people to benefit from, and not be harmed by, salmon, we compared the micronutrient intakes associated with eating salmon at the upper bound of the modelled range to Upper Tolerable Intake Levels for Sodium, Saturated Fats, Vitamin D, Iron, Calcium, Vitamin A (from animal sources), Vitamin C, and Protein as specified by Health Canada (2006). A similar check was employed by Fediuk and Thom (2008), and responds to the criticism from Tushingham, Barton, and Bettinger (2021) that efforts to reconstruct diets for coastal First Nations too often overlook the potential for high intakes of salmon to cause protein toxicity. Any benchmarks that rely on total calories (e.g. Saturated Fats) were calculated using the median value of distribution of daily caloric needs described above. For the check we use the nutrient profile values for raw, sockeye (Food Code 3052) from the Canadian Nutrient File (Health Canada, 2021). While a more precautionary approach would have been to use nutrient contents for a range of preparations, including smoking and drying, this was inhibited by missing values for the level of Vitamin D across the available nutrient profiles. Finally, to convert the upper bound of harvest rate to a rate of consumption, we used the highest estimate (0.92) of conversion from whole to edible weight, as a more precautionary account of the risk of exceeding maximum intake levels (Crapo et al., 2004).
+
+### Nutrient profile for sockeye salmon
+
+```{r sockeye.nut.profile, warning=FALSE, message=FALSE}
+sockeye.nut.profile<-data.frame(source="salmon.nutrients", energy=142, protein=21.31, total.fat=5.61, carb=0.00, sat.fat=1.182, ca=10, fe=0.42, na=112, vit.d=706, vit.a=58, dfe=8, vit.c=0.0)
+```
+
+### Tolerable upper intake levels
+
+#### Sodium
+The recommendation is for less than 2300 mg/day for people over the age of 14.
+
+#### Saturated Fats
+The recommendation is for less than 10% of daily calories to come from saturated fats.
+
+#### Upper Limit for Vit. D
+https://ods.od.nih.gov/factsheets/VitaminD-HealthProfessional/#h8
+
+#### Upper Limit for Iron
+https://ods.od.nih.gov/factsheets/Iron-HealthProfessional/#h8
+Upper Intake Limit for Iron (gastrointestinal effects, usually associated with supplements)
+
+#### Upper Limit for Calcium
+https://ods.od.nih.gov/factsheets/Calcium-HealthProfessional/#h8
+Upper Intake Limit for Calcium (usually associated with supplements)
+
+#### Upper Limit for Vit A, from animal sources
+"Because vitamin A is fat soluble, the body stores excess amounts, primarily in the liver, and these levels can accumulate. Although excess preformed vitamin A can have significant toxicity (known as hypervitaminosis A), large amounts of beta-carotene and other provitamin A carotenoids are not associated with major adverse effects [38]"
+https://ods.od.nih.gov/factsheets/VitaminA-HealthProfessional/#h8
+
+#### Upper Limit for Vit C
+"Vitamin C has low toxicity and is not believed to cause serious adverse effects at high intakes [8]"
+https://ods.od.nih.gov/factsheets/VitaminC-HealthProfessional/#h8
+
+#### Checking on AMDR
+In converting grams to calories used 9 kcal/gram for fats, 4 kcal/gram for carbs and proteins. 
+AMDR from Health Canada (https://www.canada.ca/en/health-canada/services/food-nutrition/healthy-eating/dietary-reference-intakes/tables/reference-values-macronutrients-dietary-reference-intakes-tables-2005.html)
+
+#### Protein toxicity
+From Tushingham, Barton, Bettinger (2021): 45 kg person with lower MRUS (55 mg/hr) can safely eat 143 g of protein per day; 67 kg person with higher MRUS (75 mg/hr) can safely eat 319 g of protein per day.
+
+```{r tolerable.upper.intakes, warning=FALSE, message=FALSE}
+energy.med<-median(eer.distribution$eer)
+protein.ul<-(energy.med*0.35)/4
+fat.ul<-(energy.med*0.35)/4
+carb.ul<-(energy.med*0.65)/4
+sat.fat.ul<-(energy.med*0.10)/9
+
+upper.intakes<-data.frame(source="upper.intakes", energy=energy.med, protein=protein.ul, total.fat=fat.ul, carb=carb.ul, sat.fat=sat.fat.ul, ca=2500, fe=45, na=2300, vit.d=4000, vit.a=3000, dfe=999999, vit.c=2000)
+```
+
+### Nutrient intakes associated with upper bound of harvest rate
+
+```{r estimate.amount.eaten, warning=FALSE, message=FALSE}
+g.person.yr.upper<-q3
+g.person.yr.eaten<-g.person.yr.upper*(0.92)
+g.person.day.eaten<-g.person.yr.eaten/365
+serving.person.day<-g.person.day.eaten/100
+
+energy.day<-sockeye.nut.profile$energy*serving.person.day
+protein.day<-sockeye.nut.profile$protein*serving.person.day
+total.fat.day<-sockeye.nut.profile$total.fat*serving.person.day
+carb.day<-sockeye.nut.profile$carb*serving.person.day
+sat.fat.day<-sockeye.nut.profile$sat.fat*serving.person.day
+ca.day<-sockeye.nut.profile$ca*serving.person.day
+fe.day<-sockeye.nut.profile$fe*serving.person.day
+na.day<-sockeye.nut.profile$na*serving.person.day
+vit.d.day<-sockeye.nut.profile$vit.d*serving.person.day
+vit.a.day<-sockeye.nut.profile$vit.a*serving.person.day
+dfe.day<-sockeye.nut.profile$dfe*serving.person.day
+vit.c.day<-sockeye.nut.profile$vit.c*serving.person.day
+
+daily.nutrient.est<- sockeye.nut.profile %>%
+  add_row(source="daily.intake.est", energy=energy.day, protein=protein.day, total.fat=total.fat.day, carb=carb.day, sat.fat=sat.fat.day, ca=ca.day, fe=fe.day, na=na.day, vit.d=vit.d.day, vit.a=vit.a.day, dfe=dfe.day, vit.c=vit.c.day)
+```
+
+### Comparing nutrient intakes with upper tolerable intake levels
+```{r upperintake.check, warning=FALSE, message=FALSE}
+max.nutrient.check<-rbind(daily.nutrient.est, upper.intakes)
+
+max.nutrient.difference <- max.nutrient.check %>%
+  mutate(across(2:13, ~.[3]-.[2]))
+
+max.nutrient.percent <- max.nutrient.check %>%
+  mutate(across(2:13, ~.[2]/.[3]))
+
+max.nutrient.long<- max.nutrient.percent %>%
+  filter(source=="upper.intakes") %>%
+  pivot_longer(2:13, names_to="nutrient", values_to="Percent.UpperIntake")
+
+max.nut.plot<-ggplot(max.nutrient.long, aes(x=nutrient, y=Percent.UpperIntake*100), fill="#CCCCCC") +
+  geom_col() +
+  geom_hline(yintercept=100, linetype=2) +
+  labs(title="Checking Upper Bound Against Tolerable Intake Levels",
+       x= "Nutrient", 
+       y = "Percent of Upper Intake Level 
+Contributed by Salmon") +
+  theme_classic ()
+
+max.nut.plot
+
+```
+The upper bound would not be associated with protein intakes (116 g protein/day) above what is recommended for smaller people with lower MRUS (143 g protein/day from Tushingham, Barton, Bettinger (2021)). The upper bound does, during some runs of the model, slightly surpass the recommended intake levels for Vitamin D (4,000 IU) but remains far below levels of intake associated with signs and symptoms of toxicity (10,000 IU). The median rate of salmon use would result in Vitamin D intakes below both. All other checked nutrients are well below the upper intake levels.
+
+## III.C. Checking against salmon returns
+
+Our final check on the reasonableness of the modelled rate of harvest involved comparing the rate of harvest to expected salmon returns to assess the ecological capacity of coastal systems to support harvests at the proposed rate. This check required additional assumptions such as populations of First Nations, targeted salmon species, and targeted salmon runs. To simplify these assumptions, we used a narrower geographic scale of the Central Coast region. Salmon returns to Central Coast waters were retrieved from the Salmon Watersheds Program, with data available for 2013-2017 (Salmon Watersheds Program - Pacific Salmon Foundation, 2022). The human population of Central Coast First Nations was approximated from data previously available through the British Columbia Assembly of First Nations (2021). The weight of salmon was based on the median of all species (Browning, 1980). This offers another potential place for greater specificity with regards to better reflecting the species that are more commonly harvested or preferred to be harvested by coastal First Nations. Each of these provides a very rough estimate, as such, this check should not be interpreted beyond an initial check on the ecological capacity to support the proposed rate of harvest. 
+
+We also heard grave concern from community collaborators on the reduced abundance of salmon. Indeed, many Nations have closed fishing to their members to reduce pressure on declining salmon returns. It could be useful to further explore how the approximate harvest rate would change under different projections of abundance, or how Nation-defined acceptable exploitation rates could be combined with this work to inform restoration goals for abundance.
+
+```{r harvest.rate, warning=FALSE, message=FALSE}
+num.fish.df<-data.frame(g.p.yr=c(g.person.yr.dist), g.fish=c(g.fish.dist))
+
+num.fish.df$num.fish.p<-num.fish.df$g.person.yr/num.fish.df$g.fish
+summary(num.fish.df$num.fish.p)
+num.fish.df$num.fish.cc<-num.fish.df$num.fish.p*5000
+num.fish.df$fish.run<-10000000
+num.fish.df$harvest.rate<-(num.fish.df$num.fish.cc/num.fish.df$fish.run)*100
+summary(num.fish.df$harvest.rate)
+
+```
+
+# IV. Comparing restorative harvest rates to contemporary rates
+As the estimates of restorative diet and harvest rates are, to the extent supported by available information, particular to the coast of B.C., estimates of contemporary rates that most closely align with this geographic scope were prioritized for use in our quantitative comparisons—reserving estimates from other parts of Salmon Nation (e.g. Alaska: Polissar & Neradilek, 2019) or from specific First Nations (e.g. Nuxalk First Nation: Kuhnlein, Fediuk, Nelson, Howard, & Johnson, 2013) for more general reflections on the consistency of our findings.
+
+To assess the difference between a rate of salmon harvest that would support restorative diets and harvest rates suggested by contemporary salmon use, we compare the restorative diets rate to three estimates from studies in the reviewed literature: (A) Gunton & Broadbent, 2012; (B) First Nations Panel on Fisheries 2004; (C) Marushka et al. 2019.
+
+## IV.A. Gunton & Broadbent, 2012
+Gunton, T., & Broadbent, S. (2012). A Review of Potential Impacts to Coastal First Nations from an Oil Tanker Spill Associated with the Northern Gateway Project.
+
+```{r catch.data, warning=FALSE, message=FALSE}
+kgharvested.p.yr.data<-litsource.data[litsource.data$units=="kgharvested.p.yr", ]
+
+kgharvested.p.yr.dist<-rnorm(n.samples, kgharvested.p.yr.data$mean[2], kgharvested.p.yr.data$sd[2])
+
+gharvest.p.year.GuntonBroadbent2012<-kgharvested.p.yr.dist*1000
+
+GuntonBroadbent2012<-data.frame(source="Contemporary FSC Catch", type="Estimate of Current Use", ref.yr=2012, gharvest.p.year=gharvest.p.year.GuntonBroadbent2012)
+```
+
+## IV.B. First Nations Panel on Fisheries 2004
+First Nation Panel on Fisheries. (2004). Our Place at the Table: First Nations in the B.C. Fishery. West Vancouver, BC.
+
+```{r allocation, warning=FALSE, message=FALSE}
+fishallocated.p.yr.data<-litsource.data[litsource.data$units=="fishallocated.p.yr", ]
+
+fishallocated.p.yr.mean<-fishallocated.p.yr.data$mean
+
+for (n in n.samples) {
+  g.fish<-sample(g.fish.dist, n, replace=TRUE, prob=NULL)
+  gharvest.p.year.FNFP2004<-fishallocated.p.yr.mean[1]*g.fish
+}
+
+FNFP2004<-data.frame(source="Contemporary FSC Allocation", type="Estimate of Current Use", ref.yr=2004, gharvest.p.year=gharvest.p.year.FNFP2004)
+```
+
+
+## IV.B. Marushka et al. 2019
+Marushka, L., Kenny, T.-A., Batal, M., Cheung, W. W. L., Fediuk, K., Golden, C. D., … Stewart, P. L. De. (2019). Potential impacts of climate-related decline of seafood harvest on nutritional status of coastal First Nations in British Columbia. PLoS ONE, 14(2), 1–24.
+
+```{r dietary.survey, warning=FALSE, message=FALSE}
+library(msm)
+
+geaten.p.day.data<-litsource.data[litsource.data$units=="geaten.p.day", ]
+geaten.p.day.mean<-geaten.p.day.data$mean
+geaten.p.day.sd<-geaten.p.day.data$sd
+
+## salmon diet ##
+m <- geaten.p.day.mean[6]
+s <- geaten.p.day.sd[6]
+location <- log(m^2 / sqrt(s^2 + m^2))
+shape <- sqrt(log(1 + (s^2 / m^2)))
+print(paste("location:", location))
+print(paste("shape:", shape))
+mar.salmon.dist <- rlnorm(351, location, shape)
+summary(mar.salmon.dist)
+
+
+log.Marushka.salmon.distribution<-log(mar.salmon.dist)
+mar.mean<-mean(log.Marushka.salmon.distribution)
+mar.sd<-sd(log.Marushka.salmon.distribution)
+
+lognorm.Marushka.salmon.distribution<-rlnorm(n.samples, mar.mean, mar.sd)
+
+for(n in n.samples) {
+  refuse.conversion<-sample(harvest.eaten.lnorm, n, replace=TRUE, prob=NULL)
+  mar.geaten.p.day<-sample(lognorm.Marushka.salmon.distribution, n, replace=TRUE, prob=NULL)
+  gharvest.p.year.Marushka2019<-mar.geaten.p.day*refuse.conversion*365
+}
+
+Marushka2019<-data.frame(source="Contemporary Diet", type="Estimate of Current Use", ref.yr=2008, gharvest.p.year=gharvest.p.year.Marushka2019)
+```
+
+## Comparison of 95% intervals
+
+Taking an interval from each distribution that contains 95% of values and comparing whether the modelled estimate is likely to overlap with any of the estimates of current use --roughly assessing if they are significantly different.
+
+```{r confint.comparison, warning=FALSE, message=FALSE}
+quantile(g.person.yr.dist$g.person.yr, probs=c(0.025, 0.25, 0.5, 0.75, 0.975))
+
+quantile(Marushka2019$gharvest.p.year, probs=c(0.025, 0.25, 0.5, 0.75, 0.975))
+quantile(FNFP2004$gharvest.p.year, probs=c(0.025, 0.25, 0.5, 0.75, 0.975))
+quantile(GuntonBroadbent2012$gharvest.p.year, probs=c(0.025, 0.25, 0.5, 0.75, 0.975))
+
+```
+
+## Comparison of restorative harvest rates above medians from contemporary sources
+
+Providing the percent of modelled values that exceed the median harvest rates suggested by the three current use studies.
+
+```{r percent.above.med, warning=FALSE, message=FALSE}
+full.n<-nrow(g.person.yr.dist)
+above.med.dietary.n<- g.person.yr.dist %>%
+  filter(g.person.yr>=median(Marushka2019$gharvest.p.year)) %>%
+  nrow()
+
+above.med.catch.n<- g.person.yr.dist %>%
+  filter(g.person.yr>=median(GuntonBroadbent2012$gharvest.p.year)) %>%
+  nrow()
+
+above.med.allocation.n<- g.person.yr.dist %>%
+  filter(g.person.yr>=median(FNFP2004$gharvest.p.year)) %>%
+  nrow()
+
+percent.above.med.dietary<-above.med.dietary.n/full.n
+percent.above.med.catch<-above.med.catch.n/full.n
+percent.above.med.allocation<-above.med.allocation.n/full.n
+
+percent.above.med.dietary
+percent.above.med.catch
+percent.above.med.allocation
+
+```
+
+## Box plot comparing distributions of harvest rates from restorative and contemporary diets
+
+``` {r relative.boxplot, warning=FALSE, message=FALSE}
+Estimate<-data.frame(source="Restorative Diet", type="Restorative Diet", ref.yr=2021, gharvest.p.year=g.person.yr)
+
+boxplot.df.contemporary.comparison<-rbind(Marushka2019, FNFP2004, GuntonBroadbent2012, Estimate)
+
+boxplot.df.contemporary.comparison<- boxplot.df.contemporary.comparison %>%
+  group_by(source) %>%
+  summarise(y0=min(gharvest.p.year), 
+            y2.5=quantile(gharvest.p.year, probs=0.025),
+            y25=quantile(gharvest.p.year, probs=0.25),
+            y50=quantile(gharvest.p.year, probs=0.50),
+            y75=quantile(gharvest.p.year, probs=0.75),
+            y97.5=quantile(gharvest.p.year, probs=0.975),
+            y100=max(gharvest.p.year))
+
+boxplot.df.contemporary.comparison$type<-"Contemporary Rate"
+boxplot.df.contemporary.comparison$type[boxplot.df.contemporary.comparison$source=="Restorative Diet"]<-"Restorative Rate"
+
+relative.box.plot<-ggplot(boxplot.df.contemporary.comparison, 
+                          aes(x=source, colour=type)) +
+  geom_boxplot(
+    aes(ymin=y2.5/1000, lower=y25/1000, middle=y50/1000, upper=y75/1000, ymax=y97.5/1000),
+    stat="identity") +
+  scale_colour_manual(name="Type of Rate",
+                      values=c("#962d2d", "#537191")) +
+   labs(y= "Rate of Salmon Harvest\nkg/person/year", 
+       x = "Source") +
+  theme_classic ()+
+  theme(axis.text.x=element_text(angle = 45, hjust=1),
+        text = element_text(size = 16))
+relative.box.plot
+
+ggsave("relative.boxplot.png", relative.box.plot, dpi = 700, width=12, height=8)
+```
+
+## Comparisons of medians for restorative and contemporary harvest rates
+```{r median.compare, warning=FALSE, message=FALSE}
+median.catchdata<-median(GuntonBroadbent2012$gharvest.p.year)
+median.allocation<-median(FNFP2004$gharvest.p.year)
+median.dietarysurvey<-median(Marushka2019$gharvest.p.year)
+
+restorative.catch<-median(g.person.yr)/median.catchdata
+restorative.allocation<-median(g.person.yr)/median.allocation
+restorative.diet<-median(g.person.yr)/median.dietarysurvey
+```
+
+## Bubble plot comparing medians and magnitude of differences
+
+```{r nested.bubble.compare, warning=FALSE, message=FALSE}
+upper.bound<-quantile(g.person.yr.dist$g.person.yr, probs=0.75)
+lower.bound<-quantile(g.person.yr.dist$g.person.yr, probs=0.25)
+median<-quantile(g.person.yr.dist$g.person.yr, probs=0.50)
+
+nested.bubble.gpy.df<-data.frame(source=c("Estimated Historical", "Catch Data", "Allocation", "Dietary Survey"), amount=c(median, median.catchdata, median.allocation, median.dietarysurvey), order.x=c( 1, 1, 1, 1), order.y=c(1.272, 1.08, 1.044, 0.962))
+
+nested.bubble.gpy.df$source<-factor(c("Dietary Survey", "Allocation", "Catch Data", "Estimated Historical"), ordered = TRUE)
+
+nested.bubble.gpy.plot<- ggplot(nested.bubble.gpy.df, 
+                        aes(x=order.x, y=order.y, colour=source)) +
+  geom_point(aes(size=(amount/median)*100)) +
+  labs(y= "", 
+       x = "") +
+  scale_size_area(guide = "legend",
+                  name="Percent of Restorative Diet",
+                  breaks=c(10),
+                  labels=c("10%"),
+                  max_size=100) +
+  scale_colour_manual(name="Type of Source",
+                      values=c("#CCCCCC", "#999999", "#666666", "#333333"),
+                      breaks=c("Dietary Survey", "Allocation",
+                               "Catch Data", "Estimated Historical"),
+                      labels=c("Restorative Diet: Median","Catch Data", 
+                               "Allocation", "Dietary Survey")) +
+  guides(colour="none", size="none")+
+  ylim(0.5, 2) +
+  xlim(0, 2) +
+  theme_classic() +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        text = element_text(size = 16))
+
+nested.bubble.gpy.plot
+
+ggsave("nested.bubble.gpy.png", nested.bubble.gpy.plot, dpi = 700, width=8, height=6)
+```
