@@ -462,8 +462,6 @@ g.person.yr.df<-data.frame(g.person.yr=g.person.yr)
 ### Saving the above distribution to use in the article results and figures
 This saves and sets the restorative harvest rates from 10 November 2022 run as the basis for the article results and figures. Skip this section if wanting to apply subsequent sections with novel values.
 ```{r nov10run, warning=FALSE, message=FALSE}
-write_csv(g.person.yr.df, "nov10run.gpersonyr.csv")
-
 g.person.yr.df<- read_csv("nov10run.gpersonyr.csv")
 
 g.person.yr<-g.person.yr.df$g.person.yr
