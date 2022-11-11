@@ -455,7 +455,20 @@ for(n in n.samples) {
   percent.salmon<-sample(est.kcalsalmon.totalkcal, n, replace=TRUE, prob=NULL)
   g.person.yr<-g.kcal.harvest*kcal.day*365*percent.salmon
 }
+
+g.person.yr.df<-data.frame(g.person.yr=g.person.yr)
 ```
+
+### Saving the above distribution to use in the article results and figures
+This saves and sets the restorative harvest rates from 10 November 2022 run as the basis for the article results and figures. Skip this section if wanting to apply subsequent sections with novel values.
+```{r nov10run, warning=FALSE, message=FALSE}
+write_csv(g.person.yr.df, "nov10run.gpersonyr.csv")
+
+g.person.yr.df<- read_csv("nov10run.gpersonyr.csv")
+
+g.person.yr<-g.person.yr.df$g.person.yr
+```
+
 
 ```{r restorativeharvestrates.plots, message=FALSE, warning=FALSE}
 g.person.yr.dist<-data.frame(g.person.yr=c(g.person.yr))
@@ -532,7 +545,7 @@ g.person.yr.iqr.line<-ggplot(g.person.yr.df,  aes(x=g.person.yr/1000)) +
   theme_classic() +
   xlab("Rate of Salmon Harvest\n(kg/person/year)")+
   ylab("Restorative Diets")+
-  scale_x_continuous(breaks=c(60, 240),
+  scale_x_continuous(breaks=c(65, 235),
                      limits=c(0, q3/1000+50))+
   ylim(0, 3)+
   theme(axis.text.y=element_blank(), 
@@ -1180,6 +1193,20 @@ median.dietarysurvey<-median(Marushka2019$gharvest.p.year)
 restorative.catch<-median(g.person.yr)/median.catchdata
 restorative.allocation<-median(g.person.yr)/median.allocation
 restorative.diet<-median(g.person.yr)/median.dietarysurvey
+```
+
+## Expressing gap in number of fish and at community scale
+
+```{r gap.numfish.commscale, warning=FALSE, message=FALSE}
+comm.restorative<-500*median(g.person.yr)
+comm.catch<-500*median.catchdata
+comm.allocation<-500*median.allocation
+comm.diet<-500*median.dietarysurvey
+
+restorative.catch.commscale<-(comm.restorative-comm.catch)/median(g.fish.dist)
+restorative.allocation.commscale<-(comm.restorative-comm.allocation)/median(g.fish.dist)
+restorative.diet.commscale<-(comm.restorative-comm.diet)/median(g.fish.dist)
+
 ```
 
 ## Bubble plot comparing medians and magnitude of differences
