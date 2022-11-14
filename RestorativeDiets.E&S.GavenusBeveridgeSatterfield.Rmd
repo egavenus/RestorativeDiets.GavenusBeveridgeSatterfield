@@ -554,6 +554,26 @@ g.person.yr.iqr.line
 
 ggsave("iqr.line.png", g.person.yr.iqr.line, dpi = 700, width=7.5, height=3)
 ```
+### Generating Profiles Across Range of Restorative Diets
+Using the same distributions above, exploring the parameter values that result in different estimates of salmon use rates, to accompany the distribution figure in demonstration paper.
+
+```{r distribution.profiles, warning=FALSE, message=FALSE}
+g.person.yr<-as.integer(g.person.yr)
+summary(g.person.yr)
+profile1<-which(g.person.yr==66118)
+profile2<-which(g.person.yr==68030)
+profile3<-which(g.person.yr==156274)
+profile4<-which(g.person.yr==150856)
+profile5<-which(g.person.yr==221082)
+profile6<-which(g.person.yr==233536)
+
+kcal.day[c(profile1, profile2, profile3, profile4, profile5, profile6)]
+percent.salmon[c(profile1, profile2, profile3, profile4, profile5, profile6)]
+g.kcal.harvest[c(profile1, profile2, profile3, profile4, profile5, profile6)]
+
+```
+
+
 
 # II. Sensitivity of restorative harvest rates to variance in defined variables
 
