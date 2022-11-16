@@ -1266,3 +1266,91 @@ nested.bubble.gpy.plot
 
 ggsave("nested.bubble.gpy.png", nested.bubble.gpy.plot, dpi = 700, width=8, height=6)
 ```
+
+### Alternative Figure IV
+Following conversations where the previous version implied the contemporary sources were comparable, and the gap between catch + diet would raise additional questions and potentially conclusions that are not appropriate considering the contemporary evidence comes from different years, specific geographies, and methods. Therefore, we are trying here an alternative figure with the aim of highlighting the gap between each contemporary evidence and restorative rates.
+
+```{r alt.figureiv, warning=FALSE, message=FALSE}
+nested.bubble.gpy.df<-data.frame(source=c("Estimated Historical", "Catch Data", "Allocation", "Dietary Survey"), amount=c(median, median.catchdata, median.allocation, median.dietarysurvey), order.x=c( 1, 1, 1, 1), order.y=c(1.272, 1.08, 1.044, 0.956))
+
+nested.catch.restorative<-nested.bubble.gpy.df %>%
+  filter(source=="Catch Data" | source=="Estimated Historical")
+
+nested.catch.restorative.plot<- ggplot(nested.catch.restorative, 
+                        aes(x=order.x, y=order.y, colour=source)) +
+  geom_point(aes(size=(amount/median)*100)) +
+  labs(y= "", 
+       x = "") +
+  scale_size_area(guide = "legend",
+                  name="Percent of Restorative Diet",
+                  breaks=c(10),
+                  labels=c("10%"),
+                  max_size=100) +
+  scale_colour_manual(name="Type of Source",
+                      values=c("#333333", "#999999"),
+                      breaks=c("Catch Data", "Estimated Historical"),
+                      labels=c("Restorative Diet: Median","Catch Data")) +
+  guides(colour="none", size="none")+
+  ylim(0.5, 2) +
+  xlim(0, 2) +
+  theme_classic() +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        text = element_text(size = 16))
+nested.catch.restorative.plot
+ggsave("nested.catch.restorative.png", nested.catch.restorative.plot, dpi = 700, width=8, height=6)
+
+nested.allocation.restorative<-nested.bubble.gpy.df %>%
+  filter(source=="Allocation" | source=="Estimated Historical")
+nested.allocation.restorative.plot<- ggplot(nested.allocation.restorative, 
+                        aes(x=order.x, y=order.y, colour=source)) +
+  geom_point(aes(size=(amount/median)*100)) +
+  labs(y= "", 
+       x = "") +
+  scale_size_area(guide = "legend",
+                  name="Percent of Restorative Diet",
+                  breaks=c(10),
+                  labels=c("10%"),
+                  max_size=100) +
+  scale_colour_manual(name="Type of Source",
+                      values=c("#333333", "#999999"),
+                      breaks=c("Allocation", "Estimated Historical"),
+                      labels=c("Restorative Diet: Median","Allocation Data")) +
+  guides(colour="none", size="none")+
+  ylim(0.5, 2) +
+  xlim(0, 2) +
+  theme_classic() +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        text = element_text(size = 16))
+nested.allocation.restorative.plot
+ggsave("nested.allocation.restorative.png", nested.allocation.restorative.plot, dpi = 700, width=8, height=6)
+
+nested.diet.restorative<-nested.bubble.gpy.df %>%
+  filter(source=="Dietary Survey" | source=="Estimated Historical")
+
+nested.diet.restorative.plot<- ggplot(nested.diet.restorative, 
+                        aes(x=order.x, y=order.y, colour=source)) +
+  geom_point(aes(size=(amount/median)*100)) +
+  labs(y= "", 
+       x = "") +
+  scale_size_area(guide = "legend",
+                  name="Percent of Restorative Diet",
+                  breaks=c(10),
+                  labels=c("10%"),
+                  max_size=100) +
+  scale_colour_manual(name="Type of Source",
+                      values=c("#333333", "#999999"),
+                      breaks=c("Dietary Survey", "Estimated Historical"),
+                      labels=c("Restorative Diet: Median","Dietary Data")) +
+  guides(colour="none", size="none")+
+  ylim(0.5, 2) +
+  xlim(0, 2) +
+  theme_classic() +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        text = element_text(size = 16))
+nested.diet.restorative.plot
+ggsave("nested.diet.restorative.png", nested.diet.restorative.plot, dpi = 700, width=8, height=6)
+
+````
