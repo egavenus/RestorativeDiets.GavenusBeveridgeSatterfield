@@ -253,7 +253,9 @@ sample.sexes<-sample(sex.dist$sex, n.samples, replace=TRUE, prob=sex.dist$sex.pr
 
 ### I.B.iii. Activity level
 
-The proportion of the population falling within each activity level: sedentary, low active, active, and very active, was estimated based on probabilities from the 2019 ParticipACTION report card on physical activity for adults living in Canada https://participaction.cdn.prismic.io/participaction/ab4a4d1a-35a3-40f1-9220-7b033ae21490_2019_ParticipACTION_Report_Card_on_Physical_Activity_for_Adults.pdf. There was no designation for very active within that report, and the physically active proportion (52%) was split as 22% very active and 30% active. Evidence from the FNFNES study offers an alternative: with [....]
+The proportion of the population falling within each activity level: sedentary, low active, active, and very active, was estimated based on probabilities from the 2019 ParticipACTION report card on physical activity for adults living in Canada https://participaction.cdn.prismic.io/participaction/ab4a4d1a-35a3-40f1-9220-7b033ae21490_2019_ParticipACTION_Report_Card_on_Physical_Activity_for_Adults.pdf. There was no designation for very active within that report, and the physically active proportion (52%) was split as 22% very active and 30% active. 
+
+The FNFNES report for BC (Chan, et al. 2011) indicates activity levels by age and sex ranging from: 5-25% sedentary, 35-46% somewhat active, 28-43% moderately active, and 2-27% highly active. Running the model with these probabilities did not significantly alter the range of restorative diets.
 
 ```{r act.level.dist, warning=FALSE, message=FALSE}
 activity.dist<-data.frame(act.level=c("sed", "lowact", "act", "veryact"), act.prob=c(0.18, 0.29, 0.30, 0.22))
